@@ -6,12 +6,14 @@ export function loadShader(gl, type, source)
     {
         return null;
     }
+    // console.log(source);
 
     gl.shaderSource(shader, source);
     gl.compileShader(shader);
 
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
     {
+        //console.log(gl.getShaderInfoLog(shader));
         gl.deleteShader(shader);
         return null;
     }
@@ -21,7 +23,7 @@ export function loadShader(gl, type, source)
 
 export function loadProgram(gl, shaderVertex, shaderFragment)
 {
-    const program = gl.createProgram();
+    let program = gl.createProgram();
 
     gl.attachShader(program, shaderVertex);
     gl.attachShader(program, shaderFragment);

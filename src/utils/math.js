@@ -14,19 +14,26 @@ export const vec3 = {
 };
 
 export const vec4 = {
-    length: (v) => Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2 + v[3] ** 2),
+    dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3],
+    lengthSquared: (v) => vec4.dot(v, v),
+    length: (v) => Math.sqrt(vec4.lengthSquared(v)),
     normalized: (v) =>
     {
-        const l = vec4.length(v);
-        return [v[0] / l, v[1] / l, v[2] / l, v[3] / l];
+        const invL = 1.0 / Math.sqrt(vec4.lengthSquared(v));
+        return [v[0] * invL, v[1] * invL, v[2] * invL, v[3] * invL];
     },
     sum:        (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3]],
     difference: (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2], a[3] - b[3]],
     scaled: (v, s) => [v[0] * s, v[1] * s, v[2] * s, v[3] * s],
-    dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3],
 };
 
 export const mat4 = {
+    identity: () => [
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ],
     translation: (t) =>
     {
         return [
@@ -61,7 +68,8 @@ export const mat4 = {
             [0, 0, 0, 1],
         ];
 
-        return mat4.product(mat4.transposed(M), mat4.translation(vec4.sum([0, 0, 0, 1], vec4.difference([0, 0, 0, 1], eye))));
+        // return mat4.product(mat4.transposed(M), mat4.translation(vec4.sum([0, 0, 0, 1], vec4.difference([0, 0, 0, 1], eye))));
+        return mat4.product(mat4.transposed(M), mat4.translation([-eye[0], -eye[1], -eye[2], 1.0]));
     },
     pixelToRay: function(resolution, vfov) {
         const w = resolution[0];

@@ -90,31 +90,6 @@ uniform vec4 uProgress;
 
 vec4 getObjectAttributeVectorMutable(int objectID, int attributeID)
 {
-    if (attributeID == ATTRIBUTE_POSITION)
-    {
-        switch (objectID)
-        {
-            case 0:
-                if (uProgress.r == 1.0)
-                {
-                    return vec4(-0.3333333, -0.5, -2.0, 1.0);
-                }
-                break;
-            case 1:
-                if (uProgress.g == 1.0)
-                {
-                    return vec4(0.0, -0.5, -2.0, 1.0);
-                }
-                break;
-            case 2:
-                if (uProgress.b == 1.0)
-                {
-                    return vec4(0.3333333, -0.5, -2.0, 1.0);
-                }
-                break;
-        }
-    }
-
     uint ptr = getPointerToObjectAttribute(uTextureDataPointersVectorMutable, objectID, attributeID);
     return texelFetch(uTextureDataValuesVectorMutable, ivec2(int(ptr), 0), 0);
 }

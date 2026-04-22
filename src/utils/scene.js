@@ -1,139 +1,78 @@
-const attributes = [
-    {
-        name: 'position',
-        type: 'vector',
-        mutable: true,
-    },
-    {
-        name: 'normal',
-        type: 'vector',
-        mutable: true,
-    },
-    {
-        name: 'radius',
-        type: 'scalar',
-        mutable: false,
-    },
-    {
-        name: 'emission_spd',
-        type: 'vector',
-        mutable: false,
-    },
-    {
-        name: 'emission_range_squared',
-        type: 'scalar',
-        mutable: false,
-    },
-    {
-        name: 'reflectance_spd',
-        type: 'vector',
-        mutable: false,
-    },
-];
+import { ATTRIBUTES } from '../../data/attributes.js';
+import { SCENE } from '../../data/scene.js';
+import { scalar, vec4, mat4 } from './math.js';
 
-const scene = {
-    objects: [
-        {
-            name: "Camera",
-            position: [15, 1.75, 15, 1],
-        },
-        {
-            name: "Red Light",
-            position: [1, 1, 1, 1],
-            emission_spd: [1, 0, 0, 1],
-            radius: 0.05,
-            emission_range_squared: 4 ** 2,
-        },
-        {
-            name: "Green Light",
-            position: [15, 1, 1, 1],
-            emission_spd: [0, 1, 0, 1],
-            radius: 0.05,
-            emission_range_squared: 4 ** 2,
-        },
-        {
-            name: "Blue Light",
-            position: [1, 1, 15, 1],
-            emission_spd: [0, 0, 1, 1],
-            radius: 0.05,
-            emission_range_squared: 4 ** 2,
-        },
-        {
-            name: "White Light",
-            position: [8, 3.95, 8, 1],
-            emission_spd: [1, 1, 1, 1],
-            radius: 0.05,
-            emission_range_squared: 4 ** 2,
-        },
-        {
-            name: "Floor",
-            position: [0, 0, 0, 1],
-            normal: [0, 1, 0, 0],
-            reflectance_spd: [0.8, 0.2, 0.2, 1],
-        },
-        {
-            name: "Ceiling",
-            position: [0, 4, 0, 1],
-            normal: [0, -1, 0, 0],
-            reflectance_spd: [1, 1, 0.85, 1],
-        },
-        {
-            name: "Terminal",
-            position: [8, 0, 8, 1],
-            reflectance_spd: [1, 1, 1, 1],
-            radius: 1,
-        },
-        {
-            name: "Terminal Button",
-            position: [10, -1.75, 10, 1],
-            reflectance_spd: [1, 0.54, 0, 1],
-            radius: 2,
-        },
-    ],
-};
-
-export function computeSceneData(additionalObjects = [])
+function flattenSceneTree(node)
 {
-    const camera = scene.objects.find((x) => x.name === "Camera");
-    const objects = [...scene.objects.filter((x) => x !== camera), ...additionalObjects];
+    if ('children' in node)
+    {
+        let list = [];
+
+        for (const child of node.children)
+        {
+            child.parent = node;
+
+            if ('transform' in child === false)
+            {
+                child.transform = {
+                    translation: mat4.identity(),
+                    rotation: mat4.identity(),
+                };
+            }
+
+            list = [...list, ...flattenSceneTree(child)];
+        }
+
+        return list;
+    }
+
+    return [node];
+}
+
+export function computeSceneData()
+{
+    const objects = flattenSceneTree(SCENE.root);
+    objects.sort((a, b) => {
+        return parseInt('emission_spd' in b ? 1 : 0) - parseInt('emission_spd' in a ? 1: 0);
+    });
     const objectCount = objects.length;
     const lightCount = objects.filter((x) => 'emission_spd' in x).length;
 
     //
 
+    const scalarEquality = (a, b) => a === b;
+    const vectorEquality = (a, b) => b.every((s, i) => s === a[i]);
+
     const scalars = coolfunction(
         objects,
-        attributes.filter((x) => x.type === 'scalar'),
-        (x) => [...new Set(x)],
-        (a, b) => a === b
+        ATTRIBUTES.filter((x) => x.type === 'scalar'),
+        scalarEquality
     );
 
     const vectors = coolfunction(
         objects,
-        attributes.filter((x) => x.type === 'vector'),
-        (vectors) => {
-            let objectAttributeValuesDistinctVector = [];
-            for (const vector of vectors)
-            {
-                if (!objectAttributeValuesDistinctVector.some((x) => x.every((s, i) => s === vector[i])))
-                {
-                    objectAttributeValuesDistinctVector.push(vector);
-                }
-            }
-            return objectAttributeValuesDistinctVector;
-        },
-        (a, b) => b.every((s, i) => s === a[i])
+        ATTRIBUTES.filter((x) => x.type === 'vector'),
+        vectorEquality
     );
 
     const vectorsMutable = coolfunction(
         objects,
-        attributes.filter((x) => x.type === 'vector' && x.mutable),
-        (vectors) => vectors,
-        (a, b) => b.every((s, i) => s === a[i])
+        ATTRIBUTES.filter((x) => x.type === 'vector' && x.mutable),
+        vectorEquality
     );
 
+    //
+    // console.log('SCENE TREE TRANSFORMS UNIFORM SIZE', transformsPerObjectUniformSize);
+
+
+    // console.log('OBJECTS', objects);
+    
+    // console.log('HEIGHT', height);
+
+    // console.log('transformsPerObjectAttributeUniformSize', transformsPerObjectAttributeUniformSize);
+
     return {
-        camera: camera,
+        objects: objects,
         objectCount: objectCount,
         lightCount: lightCount,
         scalars: scalars,
@@ -142,80 +81,111 @@ export function computeSceneData(additionalObjects = [])
     };
 }
 
-function coolfunction(objects, attributes, getDistinct, findIndexPredicate)
+function coolfunction(objects, attributes, equality)
 {
-    const attributeNames = attributes.map((x) => x.name);
+    // sort all mutable values before immutable values
 
-    //
+    const attributeNames = attributes.map((attribute) => attribute.name);
 
-    let objectAttributeMasks = [];
-    for (const object of objects)
-    {
-        let mask = 0;
-
-        for (const attribute of attributes)
-        {
-            const hasAttribute = attribute.name in object;
-            const attributePosition = attributes.indexOf(attribute);
-            mask |= hasAttribute << attributePosition;
-        }
-
-        objectAttributeMasks.push(mask);
-    }
-
-    //
-
-    let objectAttributePointerLists = [];
-    let objectAttributeCount = 0;
-    for (const object of objects)
-    {
-        objectAttributePointerLists.push(objectAttributeCount);
-        for (const attribute of attributes)
-        {
-            objectAttributeCount += attribute.name in object;
-        }
-    }
-
-    //
-
-    let objectAttributes = {};
-    for (const attribute of attributes)
-    {
-        objectAttributes[attribute.name] = objects.filter((x) => attribute.name in x).map((x) => x[attribute.name]);
-    }
-
-    const objectAttributeValues = Object.values(objectAttributes).flat();
-    
-    const objectAttributeValuesDistinct = getDistinct(objectAttributeValues);
-
-    //
-
-    const cursorsForValues = objectAttributeValues.map(
-        (x) => objectAttributeValuesDistinct.findIndex((y) => findIndexPredicate(x, y))
+    let objectAttributeMasks = objects.map((object) =>
+        attributes.reduce((mask, attribute, index) => mask | (attribute.name in object) << index, 0)
     );
+    // console.log('');
+    // console.log(objectAttributeMasks);
 
-    let objectAttributeCursors = [];
+    let objectAttributePointerLists = objects.map((_, i, arr) =>
+        arr.slice(0, i)
+            .map((object) => attributes.filter((attribute) => attribute.name in object).length)
+            .reduce((total, count) => total + count, 0)
+    );
+    
+    // console.log('objectAttributePointerLists', objectAttributePointerLists);
 
-    for (const object of objects)
-    {
-        for (const attribute of attributes)
-        {
-            if (attribute.name in object)
-            {
-                const index0 = objectAttributeValues.indexOf(object[attribute.name]);
-                const cursor = cursorsForValues[index0];
-                objectAttributeCursors.push(cursor);
-            }
-        }
-    }
+    let valuesMutable = objects
+        .map((object, objectID) =>
+            attributes
+                .filter((attribute) => attribute.mutable === true)
+                .filter((attribute) => attribute.name in object)
+                .map((attribute) => ({
+                    // objectID: objectID,
+                    // objectName: object.name,
+                    // attributeID: ATTRIBUTES.indexOf(attribute),
+                    // attributeName: attribute.name,
+                    pointerIndex: objectAttributePointerLists[objectID] +
+                        attributes
+                            .filter((attribute) => attribute.name in object)
+                            .indexOf(attribute),
+                    value: object[attribute.name],
+                }))
+        ).flat();
+    valuesMutable = valuesMutable.map((x, i) => ({
+        pointerIndex: x.pointerIndex,
+        valueIndex: i,
+        value: x.value,
+    }));
+    // console.log('valuesMutable', valuesMutable);
+
+    const mutables = valuesMutable.map((objectValue) => objectValue.value);
+    // console.log('mutables', mutables);
+
+    let valuesImmutable = objects
+        .map((object, objectID) =>
+            attributes
+                .filter((attribute) => attribute.mutable === false)
+                .filter((attribute) => attribute.name in object)
+                .map((attribute) => ({
+                    // objectID: objectID,
+                    // objectName: object.name,
+                    // attributeID: ATTRIBUTES.indexOf(attribute),
+                    // attributeName: attribute.name,
+                    pointerIndex: objectAttributePointerLists[objectID] +
+                        attributes
+                            .filter((attribute) => attribute.name in object)
+                            .indexOf(attribute),
+                    value: object[attribute.name],
+                }))
+        ).flat();
+    
+
+    
+    
+    const immutables = valuesImmutable.map((objectValue) => objectValue.value);
+    
+    const uniqueImmutables = immutables.reduce((arr, val) => arr.some((x) => equality(x, val)) ? arr : [...arr, val], []);
+
+    valuesImmutable = valuesImmutable.map((x) => ({
+        pointerIndex: x.pointerIndex,
+        valueIndex: uniqueImmutables.findIndex((b) => equality(x.value, b)) + mutables.length,
+        value: x.value,
+    }));
+
+    // console.log('valuesImmutable', valuesImmutable);
+    // console.log('immutables', immutables);
+    // console.log('uniqueImmutables', uniqueImmutables);
+    
+    
+    const valuesMutableImmutable = [
+        ...valuesMutable,
+        ...valuesImmutable,
+    ].flat().sort((a, b) => a.pointerIndex - b.pointerIndex);
+
+    // console.log('valuesMutableImmutable', valuesMutableImmutable);
 
     //
+
+    const objectAttributeCursorsV2 = valuesMutableImmutable.map((x) => x.valueIndex);
+    // console.log('objectAttributeCursorsV2', objectAttributeCursorsV2);
+    const objectAttributeValuesDistinctV2 = [
+        ...mutables,
+        ...uniqueImmutables,
+    ];
+    // console.log('objectAttributeValuesDistinctV2', objectAttributeValuesDistinctV2);
 
     return {
         attributeNames: attributeNames,
         objectAttributeMasks: objectAttributeMasks,
         objectAttributePointerLists: objectAttributePointerLists,
-        objectAttributePointers: objectAttributeCursors,
-        objectAttributeValues: objectAttributeValuesDistinct,
+        objectAttributePointers: objectAttributeCursorsV2,
+        objectAttributeValues: objectAttributeValuesDistinctV2,
     };
 }
