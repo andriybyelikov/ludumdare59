@@ -1,6 +1,6 @@
 # About
 
-**Wavelength Collector (Ludum Dare 59)**
+**Funnel World (Ludum Dare 59)**
 
 Game made for the Ludum Dare 59 game jam.
 
